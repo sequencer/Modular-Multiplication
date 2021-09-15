@@ -1,4 +1,3 @@
-
 \documentclass{beamer}
 \usetheme{Pittsburgh}
 \usecolortheme{spruce}
@@ -131,6 +130,7 @@ $((a + b) \bmod p + c) \bmod p = (a + (b + c) \bmod p) \bmod p$
 
 \section{Modular Algorithms}
 \begin{frame}{Basic Modular Reduction}
+% 用减法表示除法
 $a = kp + r$ ($k,p,r$ are all integer, $r < p$ and $k \geq 0$)
 
 	Use many \alert{subtractions} of $p$ to realize the modular reduction
@@ -138,10 +138,20 @@ $a = kp + r$ ($k,p,r$ are all integer, $r < p$ and $k \geq 0$)
 	\hspace*{\fill}
 
 	$a \bmod p = a - p - ... - p$ until the subtraction result is smaller than p
+% 强调除法在硬件实现中的难度。（SRT）
+\end{frame}
 
-\end{frame}	
-
+% 听众仅理解了r需要通过除法（减法）得到
 \begin{frame}{Barrett Modular Multiplication}
+
+% 首先讲这个算法的核心：
+% m/2^k = 1/p -- 把除法变成移位:
+% 除一个数等于乘一个数再移位，为什么要移k位：原因是k位乘k位最后会成为2k位，因此需要移k位，这就是2^k的来历
+% 因此假设 m = 2^k/p
+% a/p = (a * m << k)
+% 1. 把q1 -> q2 -> q3 为什么要分三步解释清楚为了弥补取下整的问题
+% 区分2k和k
+
 General idea:Let $s = 1/p$, $a \bmod p = a - \lfloor as \rfloor p$
 
 Assume $\frac{m}{2^k} = \frac{1}{p}$, we can use $\frac{m}{2^k}$ to replace $\frac{1}{p}$, here $m = \frac{2^k}{p}$
@@ -172,6 +182,38 @@ Assume $\frac{m}{2^k} = \frac{1}{p}$, we can use $\frac{m}{2^k}$ to replace $\fr
 \end{algorithmic}
 \end{frame}
 
+% 首先强调前一种算法的问题：问题在大数乘法的硬件开销：
+% 需要介绍乘法的硬件实现（一堆CSA加起来）
+% montgomery使用了迭代的思路：减少了乘法的开销
+% 
+% 把你的pdf的关键例子写成latex：
+% 模乘只需要k位，因此不需要低k位对高k位的影响
+% 每一轮otf地去掉低k位对高k位的影响
+% 再正向推导
+\begin{frame}{Montgomery Modular Multiplication: Multiprecision Case}
+	\begin{algorithmic}
+		\REQUIRE{integers $N = (N_{n-1}...N_1N_0)_b$,
+		$A = (A_{n-1}...A_1A_0)_b$,
+		$B = (B_{n-1}...B_1B_0)_b$ with $0 \leq A, B < N$,
+		$R = b^n=(10...0)_b$ with $gcd(N, b) = 1$,
+		and $N' = -N^{-1} \bmod b$}
+		\ENSURE{$ABR^{-1} \bmod N$}
+
+		\STATE $T \gets 0$
+
+		\FOR{$i \gets 0$ step $1$ to $n-1$}
+		\STATE $u_i \gets (T_0 + A_iB_0)N' \bmod b$
+		\STATE $T \gets (T+A_iB+u_iN)/b$
+		\ENDFOR
+		\IF {$T \geq N$}
+		\RETURN $T-N$
+		\ELSE
+		\RETURN $T$
+		\ENDIF
+	\end{algorithmic}
+\end{frame}
+
+
 \begin{frame}{Montgomery Modular Multiplication}
 $R = b^{\lceil \log_b N \rceil},  gcd(N,R)=1$
 
@@ -201,56 +243,6 @@ Prof: Assume $k$ is an integer, and $k < 0$, $m = TN'+kR < R$
 		&= A \cdot B \cdot R^{-1} + kN
 \end{aligned}
 	\end{equation}
-\end{frame}
-
-\begin{frame}{Montgomery Modular Multiplication: Multiprecision Case}
-	\begin{algorithmic}
-		\REQUIRE{$A = (A_{n-1}...A_1A_0)_b$,
-			$B = (B_{n-1}...B_1B_0)_b$,
-			$N = (N_{n-1}...N_1N_0)_b$,
-			$R = b^n=(10...0)_b$,
-			$N' = -N^{-1} \bmod R$, and
-			$T = AB=(T_{2n-1}T_{2n-2}...T_{0})_b$ satisfy $0 \leq T < RN$}
-		\ENSURE{$ABR^{-1} \bmod N$}
-
-		\STATE $c \gets 0$
-
-		\FOR{$i \gets 0$ step $1$ to $n-1$}
-			%\STATE \Comment{T is a multiple of $b^{i+1}$} 
-			%\STATE \Comment{$0 \leq T < (R+b^i)N$}
-			%\STATE \Comment{$T + cb^{i+n+1}$ is congruent $\bmod N$ to the original $T$} 
-			\STATE $(dT_{i+n-1}...T_i)_b \gets (0T_{i+n-1}...T_i)_b+N\cdot (T_i N' \bmod R)$
-			\STATE $(cT_{i+n})_b \gets c + d + T_{i+n}$
-		\ENDFOR
-		\IF {$(cT_{2n-1}...T_n)_b \geq N$}
-			\RETURN $(cT_{2n-1}...T_n)_b - N$
-		\ELSE
-			\RETURN $(T_{2n-1}...T_n)_b$
-		\ENDIF
-\end{algorithmic}
-\end{frame}
-
-\begin{frame}{Montgomery Modular Multiplication: Multiprecision Case}
-	\begin{algorithmic}
-		\REQUIRE{integers $N = (N_{n-1}...N_1N_0)_b$,
-		$A = (A_{n-1}...A_1A_0)_b$,
-		$B = (B_{n-1}...B_1B_0)_b$ with $0 \leq A, B < N$,
-		$R = b^n=(10...0)_b$ with $gcd(N, b) = 1$,
-		and $N' = -N^{-1} \bmod b$}
-		\ENSURE{$ABR^{-1} \bmod N$}
-
-		\STATE $T \gets 0$
-
-		\FOR{$i \gets 0$ step $1$ to $n-1$}
-		\STATE $u_i \gets (T_0 + A_iB_0)N' \bmod b$
-		\STATE $T \gets (T+A_iB+u_iN)/b$
-		\ENDFOR
-		\IF {$T \geq N$}
-		\RETURN $T-N$
-		\ELSE
-		\RETURN $T$
-		\ENDIF
-	\end{algorithmic}
 \end{frame}
 
 
